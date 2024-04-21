@@ -89,8 +89,18 @@ def main():
 
     # Parser HTTP request
     t = tokenizer(request, '\r\n')
+
     # Get the request line
     reqline = t.get_token(0)
+
+    # Get headers
+    headers = []
+    for i in range(t.count())[1:]:
+        token = t.get_token(i)
+        if token == '':
+            break
+        headers.append(token)
+
     # Get request method and path
     t.reset()
     t.tokenize(reqline, ' ')
@@ -99,10 +109,13 @@ def main():
 
     # Build HTTP response
     response = None
+
     if method != 'GET':
         response = http_message(405)
+
     elif path == '/':
         response = http_message()
+
     elif path.find('echo') == 1:
         t.reset()
         t.tokenize(path, '/')
@@ -112,7 +125,28 @@ def main():
         response.add_header('Content-Type', 'text/plain')
         response.add_header('Content-Length', str(len(arg)))
         response.add_body(arg)
-    else:
+
+    elif path == '/user-agent':
+        useragent = ''
+        useragent_hdr = ''
+
+        for h in headers:
+            if h.find('User-Agent') != -1:
+                useragent_hdr = h
+                break
+
+        if useragent_hdr != '':
+            t.reset()
+            t.tokenize(useragent_hdr, ' ')
+            useragent = t.get_token(1)
+
+        if useragent != '':
+            response = http_message()
+            response.add_header("Content-Type", "text/plain");
+            response.add_header("Content-Length", str(len(useragent)));
+            response.add_body(useragent);
+
+    if response is None:
         response = http_message(404)
 
     response_bytes = response.message.encode()
