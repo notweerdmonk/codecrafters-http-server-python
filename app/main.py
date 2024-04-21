@@ -41,13 +41,17 @@ class http_message(object):
     def __init__(self,
                  status: int =200,
                  version: str ='1.1',
+                 header: str = '',
                  body: str =''
                  ):
         self._version = version
         self._status = status
 
-        code, status = http_message._http_response_status[self._status]
-        self._header = f'HTTP/{self._version} {code} {status}{http_message._crlf}'
+        if len(header) > 0:
+            self._header = header
+        else:
+            code, status = http_message._http_response_status[self._status]
+            self._header = f'HTTP/{self._version} {code} {status}{http_message._crlf}'
 
         self._body = body
 
@@ -68,6 +72,7 @@ class http_message(object):
         self.message = self._header + http_message._crlf + self._body
 
     def add_body(self, body: str):
+        self._body = body
         self.message = self._header + http_message._crlf + self._body
 
 def main():
@@ -98,6 +103,15 @@ def main():
         response = http_message(405)
     elif path == '/':
         response = http_message()
+    elif path.find('echo') == 1:
+        t.reset()
+        t.tokenize(path, '/')
+        arg = path[path.find(t.get_token(2)):]
+
+        response = http_message()
+        response.add_header('Content-Type', 'text/plain')
+        response.add_header('Content-Length', str(len(arg)))
+        response.add_body(arg)
     else:
         response = http_message(404)
 
