@@ -2,6 +2,28 @@
 import socket
 from typing import Union
 
+class tokenizer(object):
+    def _tokenize(self, data: str, delim: str):
+        self._tokens = data.split(delim)
+
+    def __init__(self, data: str, delim: str):
+        self._tokenize(data, delim)
+
+    def tokenize(self, data: str, delim: str):
+        self._tokenize(data, delim)
+
+    def count(self):
+        return len(self._tokens)
+
+    def get_tokens(self):
+        return self._tokens
+
+    def get_token(self, i):
+        return self._tokens[i] if i < self.count() else ''
+
+    def reset(self):
+        self._tokens.clear()
+
 class http_message(object):
     _crlf = '\r\n'
     _http_response_status = {
@@ -17,8 +39,8 @@ class http_message(object):
     }
 
     def __init__(self,
-                 version: str ='1.1',
                  status: int =200,
+                 version: str ='1.1',
                  body: str =''
                  ):
         self._version = version
@@ -57,10 +79,30 @@ def main():
     server_socket = socket.create_server(("localhost", 4221), reuse_port=True)
     client_socket, address = server_socket.accept() # wait for client
 
-    client_socket.recv(4096)
+    request_bytes = client_socket.recv(4096)
+    request = request_bytes.decode('utf-8')
 
-    response = http_message().message.encode()
-    client_socket.send(response)
+    # Parser HTTP request
+    t = tokenizer(request, '\r\n')
+    # Get the request line
+    reqline = t.get_token(0)
+    # Get request method and path
+    t.reset()
+    t.tokenize(reqline, ' ')
+    method = t.get_token(0)
+    path = t.get_token(1)
+
+    # Build HTTP response
+    response = None
+    if method != 'GET':
+        response = http_message(405)
+    elif path == '/':
+        response = http_message()
+    else:
+        response = http_message(404)
+
+    response_bytes = response.message.encode()
+    client_socket.send(response_bytes)
 
     client_socket.close()
 
