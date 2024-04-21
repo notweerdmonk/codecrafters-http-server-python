@@ -1,6 +1,7 @@
 # Uncomment this to pass the first stage
 import socket
 from typing import Union
+from threading import Thread
 
 class tokenizer(object):
     def _tokenize(self, data: str, delim: str):
@@ -75,15 +76,7 @@ class http_message(object):
         self._body = body
         self.message = self._header + http_message._crlf + self._body
 
-def main():
-    # You can use print statements as follows for debugging, they'll be visible when running tests.
-    print("Logs from your program will appear here!")
-
-    # Uncomment this to pass the first stage
-
-    server_socket = socket.create_server(("localhost", 4221), reuse_port=True)
-    client_socket, address = server_socket.accept() # wait for client
-
+def handle_client(client_socket: socket):
     request_bytes = client_socket.recv(4096)
     request = request_bytes.decode('utf-8')
 
@@ -154,7 +147,28 @@ def main():
 
     client_socket.close()
 
-    server_socket.close()
+def main():
+    # You can use print statements as follows for debugging, they'll be visible when running tests.
+    print("Logs from your program will appear here!")
+
+    # Uncomment this to pass the first stage
+
+    server_socket = socket.create_server(("localhost", 4221),
+                                         backlog=5,
+                                         reuse_port=True)
+
+    MAX_CONCURRENT_CONN = 5
+    client_threads = []
+    num_conn = 0
+
+    while num_conn < MAX_CONCURRENT_CONN:
+        client_socket, address = server_socket.accept() # wait for client
+        t = Thread(target=handle_client, args=(client_socket,))
+        client_threads.append(t)
+        t.start()
+        num_conn += 1
+
+    for t in client_threads: t.join()
 
 if __name__ == "__main__":
     main()
