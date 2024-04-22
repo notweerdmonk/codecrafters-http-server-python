@@ -1,4 +1,6 @@
 # Uncomment this to pass the first stage
+import sys
+import os
 import socket
 from typing import Union
 from threading import Thread
@@ -76,6 +78,8 @@ class http_message(object):
         self._body = body
         self.message = self._header + http_message._crlf + self._body
 
+directory = ''
+
 def handle_client(client_socket: socket):
     request_bytes = client_socket.recv(4096)
     request = request_bytes.decode('utf-8')
@@ -99,6 +103,8 @@ def handle_client(client_socket: socket):
     t.tokenize(reqline, ' ')
     method = t.get_token(0)
     path = t.get_token(1)
+
+    print(f'Requested path: {path}')
 
     # Build HTTP response
     response = None
@@ -139,6 +145,42 @@ def handle_client(client_socket: socket):
             response.add_header("Content-Length", str(len(useragent)));
             response.add_body(useragent);
 
+    elif path.find('files') == 1:
+        global directory
+        if len(directory) == 0:
+            print('here')
+            response = http_message(404)
+
+        else:
+            t.reset()
+            t.tokenize(path, '/');
+            filename = path[path.find(t.get_token(2)):]
+            filepath = directory + '/' + filename
+
+            if not os.path.exists(filepath):
+                response = http_message(404)
+
+            else:
+                stinfo = os.stat(filepath)
+
+                data = ''
+                with open(filepath, 'r') as f:
+                    data = f.read()
+                if len(data) != stinfo.st_size:
+                    response = http_message(500)
+
+                else:
+                    response = http_message()
+                    response.add_header(
+                        "Content-Type", "application/octet-stream"
+                    )
+                    response.add_header(
+                        "Content-Disposition",
+                        { "attachment", f'filename="{filename}"' }
+                    )
+                    response.add_header("Content-Length", str(stinfo.st_size))
+                    response.add_body(data)
+
     if response is None:
         response = http_message(404)
 
@@ -148,6 +190,11 @@ def handle_client(client_socket: socket):
     client_socket.close()
 
 def main():
+    if len(sys.argv) == 3:
+        if sys.argv[1] == '--directory':
+            global directory
+            directory = sys.argv[2]
+
     # You can use print statements as follows for debugging, they'll be visible when running tests.
     print("Logs from your program will appear here!")
 
