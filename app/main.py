@@ -80,6 +80,8 @@ class http_message(object):
 
 directory = ''
 
+allowed_methods = ['GET', 'POST']
+
 def handle_client(client_socket: socket):
     request_bytes = client_socket.recv(4096)
     request = request_bytes.decode('utf-8')
@@ -98,6 +100,9 @@ def handle_client(client_socket: socket):
             break
         headers.append(token)
 
+    # Get request body
+    body = t.get_token(i + 1)
+
     # Get request method and path
     t.reset()
     t.tokenize(reqline, ' ')
@@ -109,80 +114,94 @@ def handle_client(client_socket: socket):
     # Build HTTP response
     response = None
 
-    if method != 'GET':
-        response = http_message(405)
+    try:
+        if method not in allowed_methods:
+            response = http_message(405)
 
-    elif path == '/':
-        response = http_message()
-
-    elif path.find('echo') == 1:
-        t.reset()
-        t.tokenize(path, '/')
-        arg = path[path.find(t.get_token(2)):]
-
-        response = http_message()
-        response.add_header('Content-Type', 'text/plain')
-        response.add_header('Content-Length', str(len(arg)))
-        response.add_body(arg)
-
-    elif path == '/user-agent':
-        useragent = ''
-        useragent_hdr = ''
-
-        for h in headers:
-            if h.find('User-Agent') != -1:
-                useragent_hdr = h
-                break
-
-        if useragent_hdr != '':
-            t.reset()
-            t.tokenize(useragent_hdr, ' ')
-            useragent = t.get_token(1)
-
-        if useragent != '':
+        elif path == '/':
             response = http_message()
-            response.add_header("Content-Type", "text/plain");
-            response.add_header("Content-Length", str(len(useragent)));
-            response.add_body(useragent);
 
-    elif path.find('files') == 1:
-        global directory
-        if len(directory) == 0:
-            print('here')
-            response = http_message(404)
-
-        else:
+        elif path.find('echo') == 1:
             t.reset()
-            t.tokenize(path, '/');
-            filename = path[path.find(t.get_token(2)):]
-            filepath = directory + '/' + filename
+            t.tokenize(path, '/')
+            arg = path[path.find(t.get_token(2)):]
 
-            if not os.path.exists(filepath):
+            response = http_message()
+            response.add_header('Content-Type', 'text/plain')
+            response.add_header('Content-Length', str(len(arg)))
+            response.add_body(arg)
+
+        elif path == '/user-agent':
+            useragent = ''
+            useragent_hdr = ''
+
+            for h in headers:
+                if h.find('User-Agent') != -1:
+                    useragent_hdr = h
+                    break
+
+            if useragent_hdr != '':
+                t.reset()
+                t.tokenize(useragent_hdr, ' ')
+                useragent = t.get_token(1)
+
+            if useragent != '':
+                response = http_message()
+                response.add_header("Content-Type", "text/plain");
+                response.add_header("Content-Length", str(len(useragent)));
+                response.add_body(useragent);
+
+        elif path.find('files') == 1:
+            global directory
+            if len(directory) == 0:
                 response = http_message(404)
 
             else:
-                stinfo = os.stat(filepath)
+                t.reset()
+                t.tokenize(path, '/');
+                filename = path[path.find(t.get_token(2)):]
+                filepath = directory + '/' + filename
 
-                data = ''
-                with open(filepath, 'r') as f:
-                    data = f.read()
-                if len(data) != stinfo.st_size:
-                    response = http_message(500)
+                if method == 'GET':
+                    if not os.path.exists(filepath):
+                        response = http_message(404)
 
-                else:
-                    response = http_message()
-                    response.add_header(
-                        "Content-Type", "application/octet-stream"
-                    )
-                    response.add_header(
-                        "Content-Disposition",
-                        { "attachment", f'filename="{filename}"' }
-                    )
-                    response.add_header("Content-Length", str(stinfo.st_size))
-                    response.add_body(data)
+                    else:
+                        stinfo = os.stat(filepath)
 
-    if response is None:
-        response = http_message(404)
+                        data = ''
+                        with open(filepath, 'r') as f:
+                            data = f.read()
+                        if len(data) != stinfo.st_size:
+                            response = http_message(500)
+
+                        else:
+                            response = http_message()
+                            response.add_header(
+                                "Content-Type", "application/octet-stream"
+                            )
+                            response.add_header(
+                                "Content-Disposition",
+                                { "attachment", f'filename="{filename}"' }
+                            )
+                            response.add_header("Content-Length", str(stinfo.st_size))
+                            response.add_body(data)
+                elif method == 'POST':
+                    nwrite = 0
+                    with open(filepath, 'w') as f:
+                        nwrite = f.write(body)
+                    if len(body) != nwrite:
+                        response = http_message(500)
+
+                    else:
+                        response = http_message(201)
+
+    except Exception as e:
+        sys.stderr.write(f'Exception occurred: {e}\n')
+
+    finally:
+        if response is None:
+            response = http_message(404)
 
     response_bytes = response.message.encode()
     client_socket.send(response_bytes)
